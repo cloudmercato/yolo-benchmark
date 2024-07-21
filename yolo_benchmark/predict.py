@@ -1,7 +1,39 @@
+import os
 import logging
+import cv2
 from ultralytics import YOLO
+from yolo_benchmark import utils
 
 logger = logging.getLogger('yolo_benchmark')
+
+
+def print_results(results, kwargs, main_args):
+    utils.print_version()
+
+    print(f"model : {main_args.model}")
+    for key, value in kwargs.items():
+        print(f"{key} : {value}")
+
+    for key, value in results.speed.items():
+        print(f"{key} : {value}")
+
+
+def set_img_shape(source_path, kwargs):
+    try:
+        img = cv2.imread(source_path)
+        if img is not None:
+            height, width = img.shape[:2]
+            img_pixels = height * width
+            kwargs.update(img_width=width, img_height=height, img_pixels=img_pixels)
+        else:
+            vcap = cv2.VideoCapture(source_path)
+            if vcap.isOpened():
+                width = vcap.get(3)
+                height = vcap.get(4)
+                img_pixels = height * width
+                kwargs.update(img_width=width, img_height=height, img_pixels=img_pixels)
+    except Exception as err:
+        logger.info("Cannot get size: %s", err)
 
 
 def main(parser, main_parser):
@@ -108,13 +140,26 @@ def main(parser, main_parser):
         for k in vars(args)
         if hasattr(main_args, k)
     }
+
+    source_url = kwargs['source']
+    source_path = utils.download(kwargs['source'])
+    kwargs['source'] = source_path
+
     logger.info("Predict conf: %s", kwargs)
-    result = model.predict(**kwargs)[0]
+    results = model.predict(**kwargs)[0]
 
-    print(f"model : {main_args.model}")
-    for key, value in kwargs.items():
-        print(f"{key} : {value}")
-    for key, value in result.speed.items():
-        print(f"{key} : {value}")
+    kwargs['total'] = sum(results.speed.values())
 
-    return result
+    set_img_shape(source_path, kwargs)
+    if 'img_pixels' in kwargs:
+        for key, value in results.speed.items():
+            kwargs[f"{key}_rate"] = kwargs['img_pixels'] / value
+        kwargs["total_rate"] = kwargs['img_pixels'] / kwargs['total']
+
+    kwargs['file_size'] = os.path.getsize(source_path)
+    kwargs['throughput'] = kwargs['file_size'] / kwargs['total'] * 1000
+
+    kwargs['source'] = source_url
+    print_results(results, kwargs, main_args)
+
+    return results
