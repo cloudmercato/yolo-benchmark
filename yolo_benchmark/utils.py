@@ -19,12 +19,19 @@ def print_version():
     print(f"ultralytics_version : {ultralytics.__version__}")
 
 
+DEFAULT_USER_AGENT = "Yolo-Benchmark/1.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)"
+DEFAULT_HEADERS = {
+    'User-Agent': DEFAULT_USER_AGENT
+}
+
+
 def download(url):
     if is_url(url):
         filename = urlparse(url).path.split('/')[-1]
         dst_path = os.path.join('/tmp/', filename)
         if not os.path.exists(dst_path):
-            response = requests.get(url)
+            response = requests.get(url, headers=DEFAULT_HEADERS)
+            response.raise_for_status()
             with open(dst_path, 'wb') as fd:
                 fd.write(response.content)
         return dst_path
